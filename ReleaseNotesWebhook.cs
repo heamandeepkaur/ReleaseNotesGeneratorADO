@@ -22,23 +22,14 @@ namespace AdoReleaseNotes
     public static class ReleaseNotesWebhook
     {
         [FunctionName("ReleaseNotesWebhook")]
-        [StorageAccount("StorageAccountConnectionStringDev")]
         public static async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)] HttpRequest req,
             [Blob("releases/latest", FileAccess.Write , Connection = "StorageAccountConnectionStringDev")] Stream releaseNotes,
             [Blob("releases", Connection = "StorageAccountConnectionStringDev")] BlobContainerClient blobContainerClient,
             ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
             
-            string name = req.Query["name"];
-
-            //Extract data from request body
-            string requestBody = new StreamReader(req.Body).ReadToEnd();
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
-            string releaseName = data?.resource?.release?.name;
-            string releaseBody = data?.resource?.release?.description;
-
             VssBasicCredential credentials = new VssBasicCredential(Environment.GetEnvironmentVariable("DevOps.Username"), Environment.GetEnvironmentVariable("DevOps.AccessToken"));
             VssConnection connection = new VssConnection(new Uri(Environment.GetEnvironmentVariable("DevOps.OrganizationURL")), credentials);
 
@@ -49,19 +40,32 @@ namespace AdoReleaseNotes
             var workItems = GetClosedItems(connection, dateSinceLastRelease); 
             var pulls = GetMergedPRs(connection, dateSinceLastRelease);
 
-            var responseMessage = String.Format("# {0} \n {1} \n\n" + "# Work Items Resolved:" + workItems + "\n\n# Changes Merged:" + pulls, releaseName, releaseBody);
 
-            var messageBytes = Encoding.UTF8.GetBytes(responseMessage);
-            releaseNotes.Write(messageBytes, 0, messageBytes.Length);
-
-            var blob = blobContainerClient.GetBlobClient(releaseName + ".md");
-            var exists = await blob.ExistsAsync();
-            if (!exists) {
-                var bytes = Encoding.UTF8.GetBytes(responseMessage);
-                MemoryStream stream = new MemoryStream(bytes);
-                await blob.UploadAsync(stream);
+            string name = req.Query["name"];
+            string releaseName = "latest release";
+            string releaseBody = "These are Work Items and Merged PR's for the last Sprint";
+            
+            //Extract data from request body
+            if(req.ContentLength != null){
+                string requestBody = new StreamReader(req.Body).ReadToEnd();
+                dynamic data = JsonConvert.DeserializeObject(requestBody);
+                releaseName = data?.resource?.release?.name;
+                releaseBody = data?.resource?.release?.description;
             }
 
+            var responseMessage = String.Format("# {0} \n {1} \n\n" + "# Work Items Resolved:" + workItems + "\n\n# Changes Merged:" + pulls, releaseName, releaseBody);
+             if(req.ContentLength != null){
+                var messageBytes = Encoding.UTF8.GetBytes(responseMessage);
+                releaseNotes.Write(messageBytes, 0, messageBytes.Length);
+
+                var blob = blobContainerClient.GetBlobClient(releaseName + ".md");
+                var exists = await blob.ExistsAsync();
+                    if (!exists) {
+                     var bytes = Encoding.UTF8.GetBytes(responseMessage);
+                    MemoryStream stream = new(bytes);
+                    await blob.UploadAsync(stream);
+                    }
+             }
             return new OkObjectResult(responseMessage);
         }
         public static string GetClosedItems(VssConnection connection, DateTime releaseSpan)
