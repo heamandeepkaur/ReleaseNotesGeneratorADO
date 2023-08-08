@@ -42,7 +42,7 @@ namespace AdoReleaseNotes
 
 
             string name = req.Query["name"];
-            string releaseName = "latest release";
+            string releaseName = "Latest release";
             string releaseBody = "These are Work Items and Merged PR's for the last Sprint";
 
             //Extract data from request body
@@ -54,7 +54,7 @@ namespace AdoReleaseNotes
                 releaseBody = data?.resource?.release?.description;
             }
 
-            var responseMessage = String.Format("# {0} \n {1} \n\n" + "# Work Items Resolved:" + workItems + "\n\n# Changes Merged:" + pulls, releaseName, releaseBody);
+            var responseMessage = String.Format("# {0} \n {1} \n\n" + "# Closed ADO Tickets:" + workItems + "\n\n# Changes Merged:" + pulls, releaseName, releaseBody);
             if (req.ContentLength != null)
             {
                 var messageBytes = Encoding.UTF8.GetBytes(responseMessage);
@@ -149,7 +149,7 @@ namespace AdoReleaseNotes
 
                 if (prs.Count != 0)
                 {
-                    //Query that grabs PRs merged since the specified date
+                    //Query that grabs the merged PR's since the specified date
                     var pulls = from p in prs
                                 where p.ClosedDate >= releaseSpan
                                 select p;
